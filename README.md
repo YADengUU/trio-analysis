@@ -1,7 +1,7 @@
 # Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine. Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0)Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1)Read alignment](#step-1---read-alignment), 
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping)
 
 ## Step 0 - Getting used to the project directory
 
@@ -56,6 +56,9 @@ mkdir $PROJECT_FOLDER/your_name
 ```
 From now on, you will be working inside `$PROJECT_FOLDER/your_name` (use `cd $PROJECT_FOLDER/your_name` to get there).
 
+#### Quality control (QC) of FASTQ?
+Usually, QC is needed to check for sequencing quality issues (adapter contamination, low-quality bases, abnormal GC content), but since our data is synthetic, this step can be omitted. `fastp` is an efficient tool for this step, in case of curiosity, if you run QC for the sequencing data above, you will just get "Sequences flagged as poor quality: 0" reported in its output .html files.
+
 ## Step 1 - Read alignment
 
 The FASTQ format contains both the DNA sequence and a quality score for each base. These reads are short fragments, and on their own they are not yet connected to any position in the genome. The alignment step uses the Burrows-Wheeler Aligner (BWA) to efficiently map short sequencing reads to a reference genome, recording the most likely genomic position and alignment quality ([Li and Durbin, 2009](https://academic.oup.com/bioinformatics/article/25/14/1754/225615)). It is recommended to use [bwa-mem2](https://github.com/bwa-mem2/bwa-mem2), an updated version of BWA-MEM that runs faster and uses memory more efficiently ([Md et al, 2019](https://ieeexplore.ieee.org/document/8820962)).
@@ -104,11 +107,34 @@ samtools index "$OUTPUT_CRAM"
 rm "$INTERMEDIATE_SAM" "$INTERMEDIATE_BAM"
 ```
 
-The script above is for aligning the sequencing data of "child". Try to understand the meaning of each command, either checking the software's online documentation (recommended), or simply ask a generative AI. Replace `your-workspace` and `your-case` with the correct names to make it run. The same needs to be done for the parents too. Note that in the beginning I requested 16 computing cores by `-n 16`, and in the commands below, `-t 16` and `-@ 16` are enabling multiple threading, otherwise the software won't know to parallelize the tasks and runs everything in a single thread even if 16 cores are available. Not every command is able to do multiple threading, and we should always check the documentation. 
+The script above is for aligning the sequencing data of "child". Try to understand the meaning of each command, either checking the software's online documentation (recommended), or simply ask a generative AI. Replace `your-workspace` and `your-case` with the correct names to make it run. The same needs to be done for the parents too. Note that in the beginning I requested 16 computing cores by `-n 16`, and in the commands below, `-t 16` and `-@ 16` are enabling multiple threading, otherwise the software won't know to parallelize the tasks and runs everything in a single thread even if 16 cores are available. Not every function is able to do multiple threading, and we should always check the documentation.
+
+To write your script, you should use a plain text editor, not Word or other softwares which processes many symbols differently. On Rackham, you can directly write the script by the tool `nano`, simply enter
+```
+nano your-analysis-script.sh
+```
+will open up the window for editing. When you finish, press `Ctrl` (not `Command`) and `O` to save, then `Enter`, press `Ctrl`+`X` to exit.
 
 Following the setups above, it should take approximately 7 to 8 hours for each sample. It is unrealistic to wait in front of the screen with an interactive window and run one sample by one sample. So if you would write and submit the Slurm script of each sample, a workday is the waiting time to get the sequences aligned. The following command is an example to submit your computing job to the server:
 ```
 sbatch -M snowy -A uppmax2024-2-1 your-analysis-script.sh
 ```
 
-For the next steps, I will provide the commands only so that you can build them into Slurm script.
+For the next steps, the example commands will be provided to be built into your own Slurm scripts.
+
+## Step 2 - Variant calling
+
+This is the most time-consuming step in this trio analysis. Each sample takes ~1.5 day, so make sure that the time requested is sufficient. Once the reads are aligned, we would like to identify where the sample’s genome differs from the reference. Variant callers like GATK ([The Genome Analysis Toolkit](https://pmc.ncbi.nlm.nih.gov/articles/PMC2928508/)) scan through the alignments to detect mismatches, insertions, and deletions.
+
+GATK is available on Rackham once you've loaded the `bioinfo-tools`: `module load GATK`. To do the variant calling, use the `HaplotypeCaller` per sample in GVCF mode as:
+```
+gatk HaplotypeCaller -R $REF \
+	-I $YOUR_WORKSPACE/child_aligned.cram \
+	-O $YOUR_WORKSPACE/child_variants.g.vcf \
+	-ERC GVCF \
+	--native-pair-hmm-threads 8
+```
+
+In GVCF mode, each sample is processed into a gVCF (Genomic VCF), which  records genotype likelihoods at every position (variant and non-variant), but compresses the non-variant blocks. Storing likelihoods at all positions allows later joint genotyping across multiple samples. Without this, you will lose evidence for genotypes in one sample when another sample shows variation.
+
+## Step 3 - Joint genotyping
