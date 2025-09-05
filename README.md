@@ -1,5 +1,5 @@
 # Clinical genomics - DNA analysis in trios
-This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine. Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
+This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine (Tillämpad precisionsmedicin 3MG065 MG065). Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
 For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping)
 
@@ -120,11 +120,13 @@ Following the setups above, it should take approximately 7 to 8 hours for each s
 sbatch -M snowy -A uppmax2024-2-1 your-analysis-script.sh
 ```
 
-For the next steps, the example commands will be provided to be built into your own Slurm scripts.
+Once submitted and running, you will find a log file in your current folder named `slurm-###.out` where the numeric part is your job ID. To check the progress, simply use `tail` to inspect the latest messages.
+
+For the next steps, example commands will be provided to help you build your own Slurm scripts.
 
 ## Step 2 - Variant calling
 
-This is the most time-consuming step in this trio analysis. Each sample takes ~1.5 day, so make sure that the time requested is sufficient. Once the reads are aligned, we would like to identify where the sample’s genome differs from the reference. Variant callers like GATK ([The Genome Analysis Toolkit](https://pmc.ncbi.nlm.nih.gov/articles/PMC2928508/)) scan through the alignments to detect mismatches, insertions, and deletions.
+This is the most time-consuming step in this trio analysis. Each sample can take ~1.5 day (with 16 cores requested), so make sure that the time requested is sufficient. Once the reads are aligned, we would like to identify where the sample’s genome differs from the reference. Variant callers like GATK ([The Genome Analysis Toolkit](https://pmc.ncbi.nlm.nih.gov/articles/PMC2928508/)) scan through the alignments to detect mismatches, insertions, and deletions.
 
 GATK is available on Rackham once you've loaded the `bioinfo-tools`: `module load GATK`. To do the variant calling, use the `HaplotypeCaller` per sample in GVCF mode as:
 ```
@@ -138,3 +140,73 @@ gatk HaplotypeCaller -R $REF \
 In GVCF mode, each sample is processed into a gVCF (Genomic VCF), which  records genotype likelihoods at every position (variant and non-variant), but compresses the non-variant blocks. Storing likelihoods at all positions allows later joint genotyping across multiple samples. Without this, you will lose evidence for genotypes in one sample when another sample shows variation.
 
 ## Step 3 - Joint genotyping
+
+After generating per-sample gVCFs from variant calling, the next step is joint genotyping, which combines the per-sample gVCFs into one multi-sample gVCF. Usually, this is done using the CombineGVCFs and GenotypeGVCFs workflow from GATK, but CombineGVCFs itself is not multi-threaded. We switch to [`GenomicsDBImport`](https://gatk.broadinstitute.org/hc/en-us/articles/360036883491-GenomicsDBImport) instead, which is preferred for large files by partitioning the genome and parallelizes across intervals, followed by joint-genotyping directly. This step can be separated to 3 substeps:
+
+#### Compress your gVCFs
+
+Technically, GenomicsDBImport requires bgzipped GVCFs (.g.vcf.gz), not plain .g.vcf, because it needs to quickly access specific genomic intervals, but plain .g.vcf is not indexed, so random access is slow/impossible. On the contrary, .g.vcf.gz files are usually accompanied by a .tbi index, which GenomicsDBImport can use to efficiently read intervals. Therefore, you should first compress your .g.vcf with `bgzip` and then index it with `tabix`. In a loop, you can do this for all 3 samples, for example:
+
+```
+for SAMPLE in sample1 sample2 sample3; do
+    if [ ! -f "${YOUR_WORKSPACE}/${SAMPLE}_variants.g.vcf.gz" ]; then
+        echo "Compressing $SAMPLE..."
+        bgzip -c "${YOUR_WORKSPACE}/${SAMPLE}_variants.g.vcf" > "${YOUR_WORKSPACE}/${SAMPLE}_variants.g.vcf.gz"
+        tabix -p vcf "${YOUR_WORKSPACE}/${SAMPLE}_variants.g.vcf.gz"
+    else
+        echo "$SAMPLE gVCF already compressed and indexed."
+    fi
+done
+```
+Modify necessary fields (e.g. sample no., speficy workspace, etc.) for yourself. This part may take around 40~50 minutes.
+
+#### Using Slurm arrays for running GenomicsDBImport and joining
+
+By "interval", it is referred to as the genomic interval over to operate, in our case it can just be a specific chromosome. The job can thus be distributed for each chromosome, which speeds up the process even more. With Slurm, you can submit such a job array by adding `#SBATCH --array=1-23`(1~22, and X; Y is omitted since the genetic sex of both patients are female) in the heading. The array ID can be retrieved in the script by `${SLURM_ARRAY_TASK_ID}`. Note that we have an "X" in the list, an easy way to retrieve it is by creating a list in your script:
+```
+CHRS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X)
+CHR=${CHRS[${SLURM_ARRAY_TASK_ID}-1]} #
+```
+
+Then you can run `GenomicsDBImport` followed by `GenotypeGVCFs` for each chromosome. For example:
+
+```
+DB_WORKSPACE="${YOUR_WORKSPACE}/trio_db_$CHR"
+OUT_VCF="${YOUR_WORKSPACE}/trio_joint_chr${CHR}.vcf.gz"
+
+echo "$(date) Chromosome $CHR: Importing to GenomicsDB workspace ${DB_WORKSPACE}..."
+
+gatk GenomicsDBImport \
+    --genomicsdb-workspace-path "${DB_WORKSPACE}" \
+    -V ${YOUR_WORKSPACE}/sample1_variants.g.vcf.gz \
+    -V ${YOUR_WORKSPACE}/sample2_variants.g.vcf.gz \
+    -V ${YOUR_WORKSPACE}/sample3_variants.g.vcf.gz \
+    --intervals "$CHR" \
+    --reader-threads 16
+
+echo "$(date) Chromosome $CHR: Genotyping..."
+
+gatk GenotypeGVCFs \
+    -R "$REF" \
+    -V "gendb://${DB_WORKSPACE}" \
+    -O "${OUT_VCF}"
+
+echo "$(date) Chromosome $CHR done."
+```
+
+Remember to include the path to `$REF` and modify the names of .g.vcf.gz files for your script. These processes can take several hours.
+
+#### Merging the per-chromosome VCFs
+After getting the per-chromosome VCFs joint with all three samples, you can merge them back to one using `MergeVcfs`:
+
+```
+INPUTS=(${YOUR_WORKSPACE}/trio_joint_chr*.vcf.gz)
+
+gatk MergeVcfs $(printf -- "-I %s " "${INPUTS[@]}") -O "${YOUR_WORKSPACE}/trio_joint.vcf.gz"
+
+gatk IndexFeatureFile -I "${YOUR_WORKSPACE}/trio_joint.vcf.gz"
+```
+
+This should only take a few minutes.
+
+## Step 4 - Variant filtering
