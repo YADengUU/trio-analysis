@@ -1,7 +1,7 @@
-# trio-analysis
+# Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine. Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0)Getting used to the project directory](#step-0---getting-used-to-the-project-directory),
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0)Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1)Read alignment](#step-1---read-alignment), 
 
 ## Step 0 - Getting used to the project directory
 
@@ -9,7 +9,7 @@ For this project, we will only focus on *de novo* variants, starting from whole 
 From the terminal, use `ssh username@rackham.uppmax.uu.se` and enter your UPPMAX password, you are now in your login node `/home/username`. Later to retrieve data, in another terminal window, connect to file transfer system by `sftp username@rackham.uppmax.uu.se`.
 
 #### Project data overview
-All project data are stored in the directory `/crex/proj/uppmax2024-2-1/rare_variants`. To check what it contains, instead of `ls` which only lists the files, you can use `du -sh /crex/proj/uppmax2024-2-1/rare_variants/*` which shows how much disk space each file/folder uses:
+All project data are stored in the directory `/crex/proj/uppmax2024-2-1/rare_variants`. To check what it contains, instead of `ls` which only lists the files, you can use `du -sh /crex/proj/uppmax2024-2-1/rare_variants/*` which shows the total size of a directory/file in a human-readable format (e.g., KB, MB, GB; `du` = disk usage, `-s` = summarize, `-h` = human-readable, `*` is standing in for “whatever string comes after `case1/`”):
 ```
 154G	/crex/proj/uppmax2024-2-1/rare_variants/case1
 148G	/crex/proj/uppmax2024-2-1/rare_variants/case3
@@ -22,6 +22,7 @@ All project data are stored in the directory `/crex/proj/uppmax2024-2-1/rare_var
 - `case1` and `case3` are the two containing trio WGS data, for the two case options. The corresponding folders have each sample's raw sequencing from high-throughput sequencing platforms (e.g., Illumina).
 ```
 du -sh /crex/proj/uppmax2024-2-1/rare_variants/case1/*
+# the lines below are the returned information from the command above, don't copy
 44G	/crex/proj/uppmax2024-2-1/rare_variants/case1/child
 57G	/crex/proj/uppmax2024-2-1/rare_variants/case1/father
 54G	/crex/proj/uppmax2024-2-1/rare_variants/case1/mother
@@ -31,6 +32,7 @@ du -sh /crex/proj/uppmax2024-2-1/rare_variants/case1/*
 
 ```
 du -sh /crex/proj/uppmax2024-2-1/rare_variants/case1/child/*
+
 22G	/crex/proj/uppmax2024-2-1/rare_variants/case1/child/forward.fq.gz
 23G	/crex/proj/uppmax2024-2-1/rare_variants/case1/child/reverse.fq.gz
 ```
@@ -38,12 +40,13 @@ du -sh /crex/proj/uppmax2024-2-1/rare_variants/case1/child/*
 - `ClinVar` contains resources from the database of clinically relevant variants to provide information on pathogenicity (e.g., “Pathogenic,” “Likely benign”) and associated diseases. `dbSNP` contains resources primarily used to annotate variants with their corresponding rsIDs and allele frequency information, but for this project, using ClinVar only is okay.
 ```
 du -sh /crex/proj/uppmax2024-2-1/rare_variants/ClinVar/*
+
 162M	/crex/proj/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz
 552K	/crex/proj/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz.tbi
 ```
 - `reference` contains the human genome assenbly (GRCh38) for read alignment and variant calling, to ensure all analyses are performed against a standardized coordinate system.
 
- And as you see, the data are huuuuuge, so we should pay extra attention on efficiently using the disk space, avoiding redundant analyses or intermediate results. Also, we must be efficient in running the analyses, to save time and money (yes, using the HPC costs money). Guidance on how to accelerate your analyses will be provided as the progress goes on.
+ And as you see, the data are huuuuuge, so we should pay extra attention on efficiently using the disk space, avoiding redundant analyses or intermediate results. Also, we must be efficient in running the analyses, to save time and money (yes, using the HPC costs tons of money). Guidance on how to accelerate your analyses as well as the approximate runtime will be provided as the progress goes on.
 
 #### Make your own workspace
 **One important thing is: do not edit or remove the data provided.** Your personal storage by default cannot accommodate most intermediate data generated during the analyses, so you would be working inside the project folder, where UPPMAX has provided us more storage.
@@ -53,3 +56,59 @@ mkdir $PROJECT_FOLDER/your_name
 ```
 From now on, you will be working inside `$PROJECT_FOLDER/your_name` (use `cd $PROJECT_FOLDER/your_name` to get there).
 
+## Step 1 - Read alignment
+
+The FASTQ format contains both the DNA sequence and a quality score for each base. These reads are short fragments, and on their own they are not yet connected to any position in the genome. The alignment step uses the Burrows-Wheeler Aligner (BWA) to efficiently map short sequencing reads to a reference genome, recording the most likely genomic position and alignment quality ([Li and Durbin, 2009](https://academic.oup.com/bioinformatics/article/25/14/1754/225615)). It is recommended to use [bwa-mem2](https://github.com/bwa-mem2/bwa-mem2), an updated version of BWA-MEM that runs faster and uses memory more efficiently ([Md et al, 2019](https://ieeexplore.ieee.org/document/8820962)).
+
+The results from BWA-MEM2 are first stored as a SAM file (Sequence Alignment/Map), a text-based format. Because SAM files are large and inefficient for processing, we won't want it to be output to the project folder. To avoid overloading the project storage and speed up computation, we use `$TMPDIR`, a temporary directory that exists only for the duration of the job. It is local to the compute node, which makes it much faster for creating and accessing intermediate files, though it is automatically cleaned up once the job finishes.
+
+The SAM files need to be converted to the compressed, binary version called BAM (Binary Alignment/Map) for subsequent processing. BAM files, in a much more reduced size, preserve all essential information (read positions, mapping qualities, flags for forward/reverse strand, etc.). To further reduce storage requirements, we often convert BAM files into CRAM format, which is more efficient to store and transfer while still retaining the same essential information as BAM for downstream steps.
+
+In short, the schematic transformation is *FASTQ → alignment → SAM → BAM → CRAM*, where the intermediate SAM and BAM files may be written to $TMPDIR for speed and the final CRAM file is written to your project workspace.
+
+#### How to code for read alignment
+
+During the data labs, you are familiar with running commands in an interactive session. However, alignment as well as the next steps will take much longer time such as hours and days. In such case, we should use the Slurm job scheduler, where you submit your script for analysis to the computing nodes and wait for the results written to your workspace. In this Slurm script, in addition to the commands, you should specify the number and duration of nodes and the tools you need to load - `bwa-mem2` to perform alignment, `samtools` for handling the intermediate files. Since this is the first step, a full example of the Slurm script (e.g., alignment_child.sh) for alignment is provided below:
+```
+#!/bin/bash -l
+#SBATCH -A uppmax2024-2-1
+#SBATCH -n 16
+#SBATCH -t 20:00:00
+#SBATCH -J alignment_child
+#SBATCH --mail-user=your-email
+#SBATCH --mail-type=ALL
+
+module load bioinfo-tools
+module load bwa bwa-mem2 samtools
+
+INTERMEDIATE_SAM="$TMPDIR/aligned_reads_child.sam"
+INTERMEDIATE_BAM="$TMPDIR/aligned_reads_child.bam"
+
+PROJECT_FOLDER="/crex/proj/uppmax2024-2-1/rare_variants"
+REF="$PROJECT_FOLDER/reference"
+OUTPUT_CRAM="$PROJECT_FOLDER/your-workspace/child_aligned.cram"
+
+bwa-mem2 mem -t 16 -R '@RG\tID:child\tSM:child\tPL:ILLUMINA' \
+    $REF/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+    $PROJECT_FOLDER/your-case/child/forward.fq.gz \
+    $PROJECT_FOLDER/your-case/child/reverse.fq.gz \
+> "$INTERMEDIATE_SAM"
+
+samtools sort -@ 16 -o "$INTERMEDIATE_BAM" "$INTERMEDIATE_SAM"
+
+samtools view -@ 16 -C -T $REF/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+    -o "$OUTPUT_CRAM" "$INTERMEDIATE_BAM"
+
+samtools index "$OUTPUT_CRAM"
+
+rm "$INTERMEDIATE_SAM" "$INTERMEDIATE_BAM"
+```
+
+The script above is for aligning the sequencing data of "child". Try to understand the meaning of each command, either checking the software's online documentation (recommended), or simply ask a generative AI. Replace `your-workspace` and `your-case` with the correct names to make it run. The same needs to be done for the parents too. Note that in the beginning I requested 16 computing cores by `-n 16`, and in the commands below, `-t 16` and `-@ 16` are enabling multiple threading, otherwise the software won't know to parallelize the tasks and runs everything in a single thread even if 16 cores are available. Not every command is able to do multiple threading, and we should always check the documentation. 
+
+Following the setups above, it should take approximately 7 to 8 hours for each sample. It is unrealistic to wait in front of the screen with an interactive window and run one sample by one sample. So if you would write and submit the Slurm script of each sample, a workday is the waiting time to get the sequences aligned. The following command is an example to submit your computing job to the server:
+```
+sbatch -M snowy -A uppmax2024-2-1 your-analysis-script.sh
+```
+
+For the next steps, I will provide the commands only so that you can build them into Slurm script.
