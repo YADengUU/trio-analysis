@@ -1,7 +1,7 @@
 # Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine (Tillämpad precisionsmedicin 3MG065 MG065). Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters)
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters), [(6) Annotating the de novo candidates](#step-6-annotating-the-de-novo-candidates). Finally, there are some [hints to elaborate your report](#for-the-report).
 
 ## Step 0 - Getting used to the project directory
 
@@ -356,4 +356,84 @@ Run the filtering criteria one by one, and then output them to a new TSV, e.g.:
 write.table(de_novo_filtered, "de_novo_candidates_filtered.tsv", sep="\t", quote=FALSE, row.names=FALSE)
 ```
 
-## Step 6
+## Step 6 Annotating the de novo candidates
+
+Raw variants by themselves are just genomic coordinates and alleles. Annotation enriches them with biological meaning: predicting their effect on genes (via tools like SnpEff or VEP), linking them to known databases (e.g., dbSNP for rsIDs, ClinVar for disease associations). This step transforms a simple variant list into interpretable results with clinical and research relevance.
+
+We will use SnpEff and ClinVar. SnpEff provides detailed functional predictions, such as whether a variant causes a missense or nonsense change, while ClinVar offers clinically curated information about known pathogenic and benign variants. In our workflow, we did not include dbSNP separately, because ClinVar already incorporates the dbSNP reference identifiers (rsIDs) alongside its clinical interpretations. This makes ClinVar sufficient for both functional and clinical annotation in this teaching context, while keeping the pipeline simpler.
+
+Since we have extracted the de novo candidates into TSV file for inspection and filtering, we need to convert them back into a VCF file before annotation:
+
+```
+# gets the first 4 columns: CHROM, POS, REF, ALT
+cut -f1-4 de_novo_candidates_filtered.tsv > de_novo_for_annotation.tsv
+# create a BED file with variant positions: VCF uses 1-based coordinates, but BED files require 0-based start and 1-based end coordinates, so $2-1 gives the start, $2 gives the end.
+awk '{print $1"\t"$2-1"\t"$2}' de_novo_for_annotation.tsv > positions.bed
+# Remove the header line: +2 means “start from line 2 onward”
+tail -n +2 positions.bed > positions_noheader.bed
+# Extract variants from the VCF using positions
+bcftools view -R positions_noheader.bed $FILTERED_VCF -o de_novo_candidates.vcf -O z
+# Compress and index the candidate VCF
+bgzip de_novo_candidates.vcf
+tabix -p vcf de_novo_candidates.vcf.gz
+```
+
+#### Using SnpEff
+
+Load the module `snpEff` once you have loaded `bioinfo-tools`. SnpEff is written in Java, so it requires a Java runtime environment to execute. On HPC systems, different versions of Java may be available, and not all software is guaranteed to work with every version. We can check the versions of Java available on Rackham by `module avail java`; by `module load java/OpenJDK_17+35`, we explicitly load Java version 17 (OpenJDK build 35), which is known to be compatible with SnpEff.
+
+Then SnpEff shall be able to run smoothly and you can also get the compressed output together:
+
+```
+snpEff -Xmx24g -v GRCh38.105 de_novo_candidates.vcf \
+  | bcftools view -Oz -o de_novo_snpEff.vcf.gz
+
+tabix -p vcf de_novo_snpEff.vcf.gz
+```
+
+- `-Xmx24g`: tells Java to allow SnpEff to use up to 24 GB of memory. Adjust if you need to.
+- `-v`: enables verbose mode (prints more details about what SnpEff is doing). `GRCh38.105`: specifies the genome database SnpEff should use for annotation (here GRCh38, Ensembl release 105).
+
+Similarly, for simplicity, you can extract the information and convert them into TSV file:
+
+```
+bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\t%INFO\n' de_novo_snpEff.vcf.gz > de_novo_snpEff.tsv
+```
+
+You can either load it in R on Rackham or download the file to your local computer. In short, SnpEff can predict whether the change occurs in a coding region, whether it alters the protein sequence, and what gene/transcript is affected. These predictions are stored in the `ANN` field of the `INFO` column in the annotated VCF, which you can access by `INFO/ANN`. For more details, you can check by:
+
+```
+bcftools view -h de_novo_snpEff.vcf.gz | grep "^##INFO"
+```
+
+We are interested in the impact categories:
+- HIGH: Likely to have a strong effect on the protein (e.g., stop-gain, frameshift, splice donor/acceptor changes).
+- MODERATE: May change protein function but not as drastically (e.g., missense variants that swap one amino acid for another).
+- LOW: Less likely to alter protein function (e.g., synonymous changes that don’t change the amino acid).
+- MODIFIER: Variants outside coding regions or with unknown impact (e.g., intergenic or intronic variants).
+
+To filter for candidates that are more biologically meaningful and likely to contribute to disease, we can focus on "HIGH" and "MODERATE".
+
+#### Using ClinVar
+
+ClinVar is a large public database that links genetic variants to clinical interpretations, such as whether a variant is benign, likely benign, pathogenic, or of uncertain significance. When we annotate our candidate variants with ClinVar and then inspect them using `bcftools`. For example:
+
+```
+bcftools annotate -a ${ClinVar_Folder}/clinvar_20250831.vcf.gz de_novo_candidates.vcf.gz -Oz -o de_novo_ClinVar.vcf.gz
+tabix -p vcf de_novo_ClinVar.vcf.gz
+```
+
+Before exporting your results, you may check what annotation has ClinVar given by the `bcftools view` command shown above. Typically, we would be interested in the clinical significance (e.g., "pathogenic"), how strong the supporting evidence is (e.g., criteria provided, multiple submitted, no conflicts), the disease or condition associated with the variant, any database identifiers (e.g., OMIM, MedGen) linked to that condition, the dbSNP identifier if available. In addition, we may be curious about the allele origin, which is the type of sample the variant was observed in. Instead of storing plain text like germline or somatic, ClinVar compresses them into a bit flag integer. Each bit in the number corresponds to one possible origin. If you check ClinVar's documentaion or the header information of your annotated output, you may see:
+
+```
+##INFO=<ID=ORIGIN,Number=1,Type=Integer,
+Description="Allele origin. Bit-encoded: 
+1-germline, 2-somatic, 4-inherited, 8-paternal, 
+16-maternal, 32-de-novo, 64-biparental, 
+128-uniparental, 256-not-tested, 512-tested-inconclusive, 
+1073741824-other">
+```
+
+Now you know what to look for and extract!
+
+## For the report
