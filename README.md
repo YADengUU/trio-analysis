@@ -1,7 +1,7 @@
 # Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine (Tillämpad precisionsmedicin 3MG065 MG065). Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering),
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters)
 
 ## Step 0 - Getting used to the project directory
 
@@ -46,7 +46,7 @@ du -sh /crex/proj/uppmax2024-2-1/rare_variants/ClinVar/*
 ```
 - `reference` contains the human genome assenbly (GRCh38) for read alignment and variant calling, to ensure all analyses are performed against a standardized coordinate system.
 
- And as you see, the data are huuuuuge, so we should pay extra attention on efficiently using the disk space, avoiding redundant analyses or intermediate results. Also, we must be efficient in running the analyses, to save time and money (yes, using the HPC costs tons of money). Guidance on how to accelerate your analyses as well as the approximate runtime will be provided as the progress goes on.
+ And as you see, the data are huuuuuge, so we should pay extra attention on efficiently using the disk space, avoiding redundant analyses or intermediate results. Also, we must be efficient in running the analyses, to save time and money (yes, using the HPC costs tons of money). Guidance on how to accelerate your analyses as well as the approximate runtime will be provided alongside the progress.
 
 #### Make your own workspace
 **One important thing is: do not edit or remove the data provided.** Your personal storage by default cannot accommodate most intermediate data generated during the analyses, so you would be working inside the project folder, where UPPMAX has provided us more storage.
@@ -236,3 +236,124 @@ bcftools index -t $FILTERED_VCF
 
 Note that to make it easier for this project, we used hard filters rather than GATK’s Variant Quality Score Recalibration (VQSR). VQSR is a machine learning (ML)–based approach that models the properties of known, high-confidence variant sites and then scores all variants relative to that model. As an ML-based approach, it requires relatively large sample sizes to build a reliable model. Since our dataset is small (a trio), VQSR may not have sufficient statistical power.
 
+This step shouldn't take too long, so you may use an interactive window.
+
+## Step 5 - De novo detection and more filters
+
+If it isn't specified that we are looking for are *de novo* variants, we would do annotation first. However, annotating all filtered variants takes much longer time and is likely unnecesary. Although tools like `bcftools` can also filter based on the genotypes, we decide to use R for a more visually pleasing and convenient experience.
+
+First, let's quickly check how the genotypes have been encoded in the VCF file, using `bcftools`:
+
+```
+module load bioinfo-tools bcftools
+bcftools query -f '%CHROM\t%POS\t[%SAMPLE=%GT\t]\n' $FILTERED_VCF | head
+```
+
+Here `bcftools query` extracts information from a VCF file in a tabular format according to the format string `-f`, followed by which we define what fields and how we want to print out:
+- `%CHROM`: the chromosome of the variant
+- `%POS`: the position on the chromosome
+- `[%SAMPLE=%GT\t]`: a per-sample loop. For every sample at this site: `%SAMPLE` = the sample name (e.g., child, father, mother), `%GT` = the genotype; `\t` will add a tab in between
+- `\n`, just like `\t`, is an escape sequence and stands for the newline character
+
+With the command above, in an interactive window, you can see something like:
+
+```
+1	10125	child=./. father=0/1  mother=0/0
+1	10439	child=0/0	father=0|1	mother=0/0
+1	10583	child=0/0	father=0/0	mother=0/1
+1	13613	child=1/1	father=0/1	mother=0/1
+1	13649	child=0/0	father=0/1	mother=0/0
+1	13684	child=./.	father=0/1	mother=0/1
+1	13757	child=0/0	father=0/1	mother=0/0
+1	13813	child=0|1	father=0|1	mother=0|1
+1	13838	child=0|1	father=0|1	mother=0|1
+1	13868	child=0/0	father=0/1	mother=0/1
+```
+
+The genotypes are written with numbers separated by `/` or `|` where: 0 = the reference allele (from the reference genome), 1 = the first alternate allele listed in the VCF. So the codes mean: `0/0` = homozygous reference, `0/1` heterozygous, `1/1` homozygous alternate; ./. = missing genotype (no call made for this sample). In the trio example, you would expect the child as `0/1` (`0|1`, if phased) while both parents are `0/0` (`0|0`) for a de novo variant.
+
+For the ease of usage in R, we can export the VCF in to TSV file for each sample (just so we don't mix the field names). Remember to modify the sample fields in the following command:
+
+```
+bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\t%FILTER\t[%GT\t%GQ\t%DP\t%AD]\n' --samples sample1 $FILTERED_VCF > $FILTERED_VCF.sample1.tsv
+```
+
+- `REF` = reference allele; `ALT` = alternative allele
+- `FILTER`, the field generated by `VariantFiltration`
+- `GQ` = Genotype quality - higher values mean more confidence that the reported genotype is correct (e.g., GQ=99 means very high confidence)
+- `DP` = Read depth - the total number of sequencing reads covering that position for the sample (e.g. DP=35 means 35 reads overlapped this variant site)
+- `AD` = Allele depths - a comma-separated count of reads supporting each allele (e.g. "AD=28,7" means 28 reads support the reference allele and 7 reads support the alternate allele); useful for checking allele balance (whether the variant allele is present in a reasonable fraction of reads)
+
+Together these fields can help filter out false positives. For instance, a genotype being 0/1 but AD=30,1 (only 1 alt read) and low GQ might be an artifact, but a de novo candidate with 0/1, AD=15,12, DP=27, and high GQ looks much more convincing. Before continuing, you can extract those that passed the hard filtering using `awk`:
+
+```
+awk '$5=="PASS"' $FILTERED_VCF.sample1.tsv > $FILTERED_VCF.sample1.tsv
+```
+
+Then, load the R packages by `module load R_packages` and enter `R` to start the R session. Some examples and hints are shown below:
+
+#### Reading and processing the genotype TSV files
+
+For manipulating the dataframe, it is recommended to load the R packages `dplyr` and `tidyr` first. For each sample, you can edit the column names to avoid ambiguity.
+
+```
+sample1 <- read.table("sample1.tsv", header=FALSE, sep="\t", stringsAsFactors=FALSE)
+colnames(sample1) <- c("CHROM","POS","REF","ALT","sample1_GT","sample1_GQ","sample1_DP","sample1_AD")
+```
+
+Since we want to merge the three samples, we need a unique "key" for them to match for. In this case, the chromosome positions:
+
+```
+sample1 <- sample1 %>% mutate(KEY = paste(CHROM, POS, sep = ":"))
+```
+
+And merge by `inner_join()` (add new lines for the 3rd sample):
+
+```
+trio <- sample1 %>%
+  inner_join(sample2 %>% select(KEY, sample2_GT = sample2_GT, sample2_AD = sample2_AD, sample2_DP = sample2_DP, sample2_GQ = sample2_GQ), by = "KEY")
+```
+
+Remember for allele depths, in one entry they contain two values seperated by a comma, so splitting them into ref/alt will be helpful. For example:
+
+```
+trio <- trio %>%
+  separate(sample1_AD, into = c("sample1_AD_ref","sample1_AD_alt"), sep = ",", convert = TRUE) %>%
+  separate(sample2_AD, into = c("sample2_AD_ref","sample2_AD_alt"), sep = ",", convert = TRUE)
+```
+
+You should also check the data types of the fields that should be numeric and convert them (here `ends_with()` looks for the columns with names ending with these strings):
+
+```
+trio <- trio %>%
+  mutate(across(ends_with(c("AD_ref","AD_alt","DP","GQ")), as.numeric))
+```
+
+#### Detecting de novo
+
+Now you can filter for the de novo candidates:
+
+```
+de_novo <- trio %>%
+  filter(
+    child_GT %in% c("0/1","1/0","0|1","1|0"),
+    ...... # what should you write for the father and mother's GTs?
+  )
+```
+
+#### Extra filters
+
+Some additional filters to consider about (adjust thresholds if needed):
+- GQ ≥ 20~30
+- DP ≥15–20
+- Parents' AD_alt == 0  (or ≤1 read with AD_alt very low) plus good DP and GQ
+- Allele balance: add a column to the dataframe with `mutate()` as above, and filter for the value among a range, such as 0.3~0.7. Hint: allele balance = AD_alt / (AD_ref + AD_alt)
+- For typical trio-based de novo variant discovery, the "true" de novo variants are usually short variants such as SNPs (single-base changes) or small indels (usually ≤10 bp). In the genotype file, some have very long alleles which can usually be structural variants, complex events, or annotation artifacts. Most trio studies would focus on short, high-confidence variants because the long ones are harder to genotype accurately and are rarely de novo. Hint: filter the length of the alleles (ref and alt) using `nchar()`.
+
+Run the filtering criteria one by one, and then output them to a new TSV, e.g.:
+
+```
+write.table(de_novo_filtered, "de_novo_candidates_filtered.tsv", sep="\t", quote=FALSE, row.names=FALSE)
+```
+
+## Step 6
