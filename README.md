@@ -1,7 +1,7 @@
 # Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine (Tillämpad precisionsmedicin 3MG065 MG065). Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters), [(6) Annotating the de novo candidates](#step-6-annotating-the-de-novo-candidates). Finally, there are some [hints to elaborate your report](#for-the-report).
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters), [(6) Annotating the de novo candidates](#step-6-annotating-the-de-novo-candidates). Finally, there are some [hints to elaborate your report](#extra-notes-for-the-report).
 
 ## Step 0 - Getting used to the project directory
 
@@ -436,4 +436,31 @@ Description="Allele origin. Bit-encoded:
 
 Now you know what to look for and extract!
 
-## For the report
+## Extra notes for the report
+
+You've made it to experience finding a *single synthetic de-novo mutation*. To make the project report more approachable and with depth, in addition to the workflow diagram and a little emphasis on techniques for efficiently using the HPC, there may be something to consider about:
+
+#### Visualizing your finding
+
+Visual inspection is good for quick validation. IGV is a good tool to view BAM/CRAM at the locus for child and both parents. Uploading the whole aligned files is unrealistic, so you might want to subset the BAM/CRAM to just around ±100 bp of the locus, which can be done by `samtools` for the three samples:
+
+```
+# Example: extract reads at "chr:position-position"
+samtools view -b sample1.cram chr:position-position > sample1.slice.bam
+# Index them for IGV
+samtools index sample1.slice.bam
+```
+
+Then open IGV from your browser, with the correct reference genome selected, upload the files you just generated from the tag "Sample Info" and navigate to your locus.
+
+#### Evidence for "rare variant"
+
+Although dbSNP was not used during the annotation step, you can still search for the variant with its rsID on the [NCBI](https://www.ncbi.nlm.nih.gov/snp/). What have you found to confirm its rarity?
+
+#### Extra reflection
+
+Our setup and pipeline make it relatively straightforward to explore de-novo detection, but it is simplified compared to real clinical pipelines. In real-world scenarios, additional steps are often needed, such as using pedigree information for phasing, handling multi-allelic sites carefully, applying left-normalization, filtering based on population frequency, and validating findings with Sanger sequencing.
+
+- How might relying only on the synthetic pipeline lead to false positives or false negatives in real data?
+-	Which additional filters or checks from published protocols (e.g., [Diab et al. 2021](https://star-protocols.cell.com/protocols/514)) could improve confidence in a real clinical setting?
+- How would you confirm a candidate variant experimentally beyond just looking at BAM/CRAM files?
