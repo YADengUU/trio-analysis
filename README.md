@@ -438,7 +438,7 @@ Now you know what to look for and extract!
 
 ## Extra notes for the report
 
-You've made it to experience finding a *single synthetic de-novo mutation*. To make the project report more approachable and with depth, in addition to the workflow diagram and a little emphasis on techniques for efficiently using the HPC, there may be something to consider about:
+To make the project report more approachable and with depth, in addition to the workflow diagram and a little emphasis on techniques for efficiently using the HPC, there may be something to consider about:
 
 #### Visualizing your finding
 
@@ -455,7 +455,7 @@ Then open IGV from your browser, with the correct reference genome selected, upl
 
 #### Evidence for "rare variant"
 
-Although dbSNP was not used during the annotation step, you can still search for the variant with its rsID on the [NCBI](https://www.ncbi.nlm.nih.gov/snp/). What have you found to confirm its rarity?
+Although dbSNP was not used during the annotation step, you can still search for the variant with its rsID on the [NCBI Databse](https://www.ncbi.nlm.nih.gov/snp/). What have you found to confirm its rarity?
 
 #### Extra reflection
 
@@ -464,3 +464,6 @@ Our setup and pipeline make it relatively straightforward to explore de-novo det
 - How might relying only on the synthetic pipeline lead to false positives or false negatives in real data?
 -	Which additional filters or checks from published protocols (e.g., [Diab et al. 2021](https://star-protocols.cell.com/protocols/514)) could improve confidence in a real clinical setting?
 - How would you confirm a candidate variant experimentally beyond just looking at BAM/CRAM files?
+
+
+Congratulations! You've made it to experience finding a *single synthetic de-novo mutation*. Hope this page has been helpful for your project experience. Good luck on your reports and presentation.
