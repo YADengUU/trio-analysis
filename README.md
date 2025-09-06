@@ -1,7 +1,7 @@
 # Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine (Tillämpad precisionsmedicin 3MG065 MG065). Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping)
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering),
 
 ## Step 0 - Getting used to the project directory
 
@@ -109,7 +109,7 @@ rm "$INTERMEDIATE_SAM" "$INTERMEDIATE_BAM"
 
 The script above is for aligning the sequencing data of "child". Try to understand the meaning of each command, either checking the software's online documentation (recommended), or simply ask a generative AI. Replace `your-workspace` and `your-case` with the correct names to make it run. The same needs to be done for the parents too. Note that in the beginning I requested 16 computing cores by `-n 16`, and in the commands below, `-t 16` and `-@ 16` are enabling multiple threading, otherwise the software won't know to parallelize the tasks and runs everything in a single thread even if 16 cores are available. Not every function is able to do multiple threading, and we should always check the documentation.
 
-To write your script, you should use a plain text editor, not Word or other softwares which processes many symbols differently. On Rackham, you can directly write the script by the tool `nano`, simply enter
+To write your script, you should use a plain text editor, not Word or other softwares which process many symbols differently. On Rackham, you can directly write the script by the tool `nano`, simply enter
 ```
 nano your-analysis-script.sh
 ```
@@ -145,7 +145,7 @@ After generating per-sample gVCFs from variant calling, the next step is joint g
 
 #### Compress your gVCFs
 
-Technically, GenomicsDBImport requires bgzipped GVCFs (.g.vcf.gz), not plain .g.vcf, because it needs to quickly access specific genomic intervals, but plain .g.vcf is not indexed, so random access is slow/impossible. On the contrary, .g.vcf.gz files are usually accompanied by a .tbi index, which GenomicsDBImport can use to efficiently read intervals. Therefore, you should first compress your .g.vcf with `bgzip` and then index it with `tabix`. In a loop, you can do this for all 3 samples, for example:
+Technically, `GenomicsDBImport` requires bgzipped GVCFs (.g.vcf.gz), not plain .g.vcf, because it needs to quickly access specific genomic intervals, but plain .g.vcf is not indexed, so random access is slow/impossible. On the contrary, .g.vcf.gz files are usually accompanied by a .tbi index, which GenomicsDBImport can use to efficiently read intervals. Therefore, you should first compress your .g.vcf with `bgzip` and then index it with `tabix`. In a loop, you can do this for all 3 samples, for example:
 
 ```
 for SAMPLE in sample1 sample2 sample3; do
@@ -165,7 +165,7 @@ Modify necessary fields (e.g. sample no., speficy workspace, etc.) for yourself.
 By "interval", it is referred to as the genomic interval over to operate, in our case it can just be a specific chromosome. The job can thus be distributed for each chromosome, which speeds up the process even more. With Slurm, you can submit such a job array by adding `#SBATCH --array=1-23`(1~22, and X; Y is omitted since the genetic sex of both patients are female) in the heading. The array ID can be retrieved in the script by `${SLURM_ARRAY_TASK_ID}`. Note that we have an "X" in the list, an easy way to retrieve it is by creating a list in your script:
 ```
 CHRS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X)
-CHR=${CHRS[${SLURM_ARRAY_TASK_ID}-1]} #
+CHR=${CHRS[${SLURM_ARRAY_TASK_ID}-1]} # note: -1 is purely to shift between SLURM’s 1-based indexing and Bash’s 0-based indexing
 ```
 
 Then you can run `GenomicsDBImport` followed by `GenotypeGVCFs` for each chromosome. For example:
@@ -207,6 +207,32 @@ gatk MergeVcfs $(printf -- "-I %s " "${INPUTS[@]}") -O "${YOUR_WORKSPACE}/trio_j
 gatk IndexFeatureFile -I "${YOUR_WORKSPACE}/trio_joint.vcf.gz"
 ```
 
-This should only take a few minutes.
+This may only take a few minutes.
 
 ## Step 4 - Variant filtering
+
+Once joint genotyping has produced a unified call set, the next step is variant filtering, where we distinguish likely true variants from sequencing artifacts and low-quality calls. Raw variant calls often include false positives caused by sequencing errors, misalignments, or technical noise. To address this, we can apply hard filters using GATK's [`VariantFiltration`](https://gatk.broadinstitute.org/hc/en-us/articles/360037434691-VariantFiltration) to remove variants that are more likely to be artifacts than true signals, based on the quality metrics calculated during variant calling. For example:
+
+- QD (Quality by Depth): The variant confidence normalized by the depth of coverage (DP). A low QD (< 2.0) suggests that the variant call has relatively low confidence given the amount of supporting data, often indicating sequencing noise rather than a true variant.
+- FS (Fisher Strand Bias test): Whether the variant is disproportionately observed in reads from only one DNA strand (forward vs. reverse). A high FS (> 60.0) indicates strong strand bias, which is often a hallmark of sequencing artifacts.
+- MQ (Mapping Quality): How confidently reads were aligned to the reference genome at that site. Variants with MQ < 40.0 occur in regions where reads map poorly, often due to repeats or ambiguous sequence, and are less reliable.
+
+By applying these thresholds, variants that fail one or more criteria are flagged with the corresponding filter name (e.g., `QD_filter`, `FS_filter`, `MQ_filter`). They are not removed, but GATK tags them with a `FILTER` field: those that pass all filters get `PASS`, otherwise will have the corresponding filter names. Here's an example of using `VariantFiltration`:
+
+```
+INPUT_VCF="${YOUR_WORKSPACE}/trio_joint.vcf.gz"
+FILTERED_VCF="${YOUR_WORKSPACE}/trio_joint.filtered.vcf.gz"
+
+gatk VariantFiltration \
+   -R $REF \
+   -V $INPUT_VCF \
+   -O $FILTERED_VCF \
+   --filter-name "QD_filter" --filter-expression "QD < 2.0" \
+   --filter-name "FS_filter" --filter-expression "FS > 60.0" \
+   --filter-name "MQ_filter" --filter-expression "MQ < 40.0"
+
+bcftools index -t $FILTERED_VCF
+```
+
+Note that to make it easier for this project, we used hard filters rather than GATK’s Variant Quality Score Recalibration (VQSR). VQSR is a machine learning (ML)–based approach that models the properties of known, high-confidence variant sites and then scores all variants relative to that model. As an ML-based approach, it requires relatively large sample sizes to build a reliable model. Since our dataset is small (a trio), VQSR may not have sufficient statistical power.
+
