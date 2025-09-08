@@ -455,7 +455,7 @@ Then open IGV from your browser, with the correct reference genome selected, upl
 
 #### Evidence for "rare variant"
 
-Although dbSNP was not used during the annotation step, you can still search for the variant with its rsID on the [NCBI Databse](https://www.ncbi.nlm.nih.gov/snp/). What have you found to confirm its rarity?
+Although dbSNP was not used during the annotation step, you can still search for the variant with its rsID on the [NCBI Database](https://www.ncbi.nlm.nih.gov/snp/). What have you found to confirm its rarity?
 
 #### Extra reflection
 
