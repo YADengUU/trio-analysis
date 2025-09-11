@@ -419,7 +419,8 @@ To filter for candidates that are more biologically meaningful and likely to con
 ClinVar is a large public database that links genetic variants to clinical interpretations, such as whether a variant is benign, likely benign, pathogenic, or of uncertain significance. When we annotate our candidate variants with ClinVar and then inspect them using `bcftools`. For example:
 
 ```
-bcftools annotate -a ${ClinVar_Folder}/clinvar_20250831.vcf.gz de_novo_candidates.vcf.gz -Oz -o de_novo_ClinVar.vcf.gz
+bcftools annotate -a /crex/proj/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz -c INFO/CLNSIG,INFO/CLNREVSTAT,INFO/CLNDN,INFO/CLNDISDB,INFO/ORIGIN,INFO/RS \
+    de_novo_candidates.vcf.gz -Oz -o de_novo_ClinVar.vcf.gz
 tabix -p vcf de_novo_ClinVar.vcf.gz
 ```
 
