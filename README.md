@@ -452,7 +452,7 @@ samtools view -b sample1.cram chr:position-position > sample1.slice.bam
 samtools index sample1.slice.bam
 ```
 
-Then open IGV from your browser, with the correct reference genome selected, upload the files you just generated from the tag "Sample Info" and navigate to your locus.
+Then open IGV from your browser, with the correct reference genome selected, upload the files you just generated from the tag "Tracks" and navigate to your locus.
 
 #### Evidence for "rare variant"
 
