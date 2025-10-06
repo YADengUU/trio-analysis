@@ -298,6 +298,7 @@ For manipulating the dataframe, it is recommended to load the R packages `dplyr`
 
 ```
 sample1 <- read.table("sample1.pass.tsv", header=FALSE, sep="\t", stringsAsFactors=FALSE)
+sample1 <- sample1[,-c(5)] # exclude 5th column containing the information of hard filtering; now all has "PASS"
 colnames(sample1) <- c("CHROM","POS","REF","ALT","sample1_GT","sample1_GQ","sample1_DP","sample1_AD")
 ```
 
