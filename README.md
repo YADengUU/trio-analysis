@@ -287,7 +287,7 @@ bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\t%FILTER\t[%GT\t%GQ\t%DP\t%AD]\n' --
 Together these fields can help filter out false positives. For instance, a genotype being 0/1 but AD=30,1 (only 1 alt read) and low GQ might be an artifact, but a de novo candidate with 0/1, AD=15,12, DP=27, and high GQ looks much more convincing. Before continuing, you can extract those that passed the hard filtering using `awk`:
 
 ```
-awk '$5=="PASS"' $FILTERED_VCF.sample1.tsv > $FILTERED_VCF.sample1.tsv
+awk '$5=="PASS"' $FILTERED_VCF.sample1.tsv > $FILTERED_VCF.sample1.pass.tsv
 ```
 
 Then, load the R packages by `module load R_packages` and enter `R` to start the R session. Some examples and hints are shown below:
@@ -297,7 +297,7 @@ Then, load the R packages by `module load R_packages` and enter `R` to start the
 For manipulating the dataframe, it is recommended to load the R packages `dplyr` and `tidyr` first. For each sample, you can edit the column names to avoid ambiguity.
 
 ```
-sample1 <- read.table("sample1.tsv", header=FALSE, sep="\t", stringsAsFactors=FALSE)
+sample1 <- read.table("sample1.pass.tsv", header=FALSE, sep="\t", stringsAsFactors=FALSE)
 colnames(sample1) <- c("CHROM","POS","REF","ALT","sample1_GT","sample1_GQ","sample1_DP","sample1_AD")
 ```
 
