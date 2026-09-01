@@ -87,7 +87,7 @@ module load bwa bwa-mem2 samtools
 INTERMEDIATE_SAM="$TMPDIR/aligned_reads_child.sam"
 INTERMEDIATE_BAM="$TMPDIR/aligned_reads_child.bam"
 
-PROJECT_FOLDER="/crex/proj/uppmax2024-2-1/rare_variants"
+PROJECT_FOLDER="/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants"
 REF="$PROJECT_FOLDER/reference"
 OUTPUT_CRAM="$PROJECT_FOLDER/your-workspace/child_aligned.cram"
 
