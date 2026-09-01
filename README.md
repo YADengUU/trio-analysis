@@ -6,43 +6,43 @@ For this project, we will only focus on *de novo* variants, starting from whole 
 ## Step 0 - Getting used to the project directory
 
 #### Log into your UPPMAX Rackham account
-From the terminal, use `ssh username@rackham.uppmax.uu.se` and enter your UPPMAX password, you are now in your login node `/home/username`. Later to retrieve data, in another terminal window, connect to file transfer system by `sftp username@rackham.uppmax.uu.se`.
+From the terminal, use `ssh username@pelle.uppmax.uu.se` and enter your UPPMAX password, you are now in your login node `/home/username`. Later to retrieve data, in another terminal window, connect to file transfer system by `sftp username@rackham.uppmax.uu.se`.
 
 #### Project data overview
-All project data are stored in the directory `/crex/proj/uppmax2024-2-1/rare_variants`. To check what it contains, instead of `ls` which only lists the files, you can use `du -sh /crex/proj/uppmax2024-2-1/rare_variants/*` which shows the total size of a directory/file in a human-readable format (e.g., KB, MB, GB; `du` = disk usage, `-s` = summarize, `-h` = human-readable, `*` is standing in for “whatever string comes after `case1/`”):
+All project data are stored in the directory `/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants`. To check what it contains, instead of `ls` which only lists the files, you can use `du -sh /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/*` which shows the total size of a directory/file in a human-readable format (e.g., KB, MB, GB; `du` = disk usage, `-s` = summarize, `-h` = human-readable, `*` is standing in for “whatever string comes after `case1/`”):
 ```
-154G	/crex/proj/uppmax2024-2-1/rare_variants/case1
-148G	/crex/proj/uppmax2024-2-1/rare_variants/case3
-163M	/crex/proj/uppmax2024-2-1/rare_variants/ClinVar
-28G	/crex/proj/uppmax2024-2-1/rare_variants/dbSNP
-24G	/crex/proj/uppmax2024-2-1/rare_variants/reference
-167G	/crex/proj/uppmax2024-2-1/rare_variants/testing
+154G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1
+148G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case3
+163M	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/ClinVar
+28G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/dbSNP
+24G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/reference
+167G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/testing
 ```
 
 - `case1` and `case3` are the two containing trio WGS data, for the two case options. The corresponding folders have each sample's raw sequencing from high-throughput sequencing platforms (e.g., Illumina).
 ```
-du -sh /crex/proj/uppmax2024-2-1/rare_variants/case1/*
+du -sh /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/*
 # the lines below are the returned information from the command above, don't copy
-44G	/crex/proj/uppmax2024-2-1/rare_variants/case1/child
-57G	/crex/proj/uppmax2024-2-1/rare_variants/case1/father
-54G	/crex/proj/uppmax2024-2-1/rare_variants/case1/mother
+44G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/child
+57G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/father
+54G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/mother
 ```
 
  Originally in FASTQ format (.fq.gz - .fq or .fastq extension indicates the FASTQ format, while the .gz suffix signifies that it is a compressed file, saving storage space), each read is recorded along with its base qualities. Reads are typically produced as paired-end reads (forward and reverse), meaning the sequencer reads both ends of a DNA fragment.
 
 ```
-du -sh /crex/proj/uppmax2024-2-1/rare_variants/case1/child/*
+du -sh /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/child/*
 
-22G	/crex/proj/uppmax2024-2-1/rare_variants/case1/child/forward.fq.gz
-23G	/crex/proj/uppmax2024-2-1/rare_variants/case1/child/reverse.fq.gz
+22G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/child/forward.fq.gz
+23G	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/case1/child/reverse.fq.gz
 ```
 
 - `ClinVar` contains resources from the database of clinically relevant variants to provide information on pathogenicity (e.g., “Pathogenic,” “Likely benign”) and associated diseases. `dbSNP` contains resources primarily used to annotate variants with their corresponding rsIDs and allele frequency information, but for this project, using ClinVar only is okay.
 ```
-du -sh /crex/proj/uppmax2024-2-1/rare_variants/ClinVar/*
+du -sh /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/ClinVar/*
 
-162M	/crex/proj/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz
-552K	/crex/proj/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz.tbi
+162M	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz
+552K	/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz.tbi
 ```
 - `reference` contains the human genome assenbly (GRCh38) for read alignment and variant calling, to ensure all analyses are performed against a standardized coordinate system.
 
@@ -51,7 +51,7 @@ du -sh /crex/proj/uppmax2024-2-1/rare_variants/ClinVar/*
 #### Make your own workspace
 **One important thing is: do not edit or remove the data provided.** Your personal storage by default cannot accommodate most intermediate data generated during the analyses, so you would be working inside the project folder, where UPPMAX has provided us more storage.
 ```
-PROJECT_FOLDER="/crex/proj/uppmax2024-2-1/rare_variants"
+PROJECT_FOLDER="/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants"
 mkdir $PROJECT_FOLDER/your_name
 ```
 From now on, you will be working inside `$PROJECT_FOLDER/your_name` (use `cd $PROJECT_FOLDER/your_name` to get there).
@@ -115,9 +115,9 @@ nano your-analysis-script.sh
 ```
 will open up the window for editing. When you finish, press `Ctrl` (not `Command`) and `O` to save, then `Enter`, press `Ctrl`+`X` to exit.
 
-Following the setups above, it should take approximately 7 to 8 hours for each sample. It is unrealistic to wait in front of the screen with an interactive window and run one sample by one sample. So if you would write and submit the Slurm script of each sample, a workday is the waiting time to get the sequences aligned. The following command is an example to submit your computing job to the server:
+Following the setups above, it should take approximately 7 to 8 hours for each sample. It is unrealistic to wait in front of the screen with an interactive window and run one sample by one sample. So if you would write and submit the Slurm script of each sample, a workday is the waiting time to get the sequences aligned. The following command is an example to submit your computing job to the server (see [UPPMAX page on using Slurm on Pelle](https://docs.uppmax.uu.se/cluster_guides/slurm_on_pelle/)):
 ```
-sbatch -M snowy -A uppmax2024-2-1 your-analysis-script.sh
+sbatch -A uppmax2024-2-1 your-analysis-script.sh
 ```
 
 Once submitted and running, you will find a log file in your current folder named `slurm-###.out` where the numeric part is your job ID. To check the progress, simply use `tail` to inspect the latest messages.
@@ -420,7 +420,7 @@ To filter for candidates that are more biologically meaningful and likely to con
 ClinVar is a large public database that links genetic variants to clinical interpretations, such as whether a variant is benign, likely benign, pathogenic, or of uncertain significance. When we annotate our candidate variants with ClinVar and then inspect them using `bcftools`. For example:
 
 ```
-bcftools annotate -a /crex/proj/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz -c INFO/CLNSIG,INFO/CLNREVSTAT,INFO/CLNDN,INFO/CLNDISDB,INFO/ORIGIN,INFO/RS \
+bcftools annotate -a /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/ClinVar/clinvar_20250831.vcf.gz -c INFO/CLNSIG,INFO/CLNREVSTAT,INFO/CLNDN,INFO/CLNDISDB,INFO/ORIGIN,INFO/RS \
     de_novo_candidates.vcf.gz -Oz -o de_novo_ClinVar.vcf.gz
 tabix -p vcf de_novo_ClinVar.vcf.gz
 ```
