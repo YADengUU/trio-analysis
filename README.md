@@ -1,12 +1,12 @@
 # Clinical genomics - DNA analysis in trios
 This page is designated to provide elementary guidance for the mentor track "clinical genomics - DNA analysis in trios" of the course Applied Precision Medicine (Tillämpad precisionsmedicin 3MG065 MG065). Trio analysis is an approach for identifying disease-causing variants by sequencing and comparing the genomes of the affected child and both biological parents. By checking the inheritance patterns across the trio, we can detect *de novo* variants that occur spontaneously in the child but are absent in the parents, as well as recessive or compound heterozygou variants inherited from each parents. It helps distinguish pathogenic mutations from benign variation and is especially powerful for studying rare diseases where *de novo* or inherited genetic factors is the central cause ([Malmgren et al. 2025](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2025.1580879/full)).
 
-For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Rackham cluster of UPPMAX. Analyses should also be run on Rackham. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters), [(6) Annotating the de novo candidates](#step-6-annotating-the-de-novo-candidates). Finally, there are some [hints to elaborate your report](#extra-notes-for-the-report).
+For this project, we will only focus on *de novo* variants, starting from whole genome sequencing (WGS) data of an affected child and the parents (unaffected). Project data are synthetic with the pathogenic variant mutated manually; these insensitive data are stored on Pelle cluster of UPPMAX. Analyses should also be run on Pelle. Now we may begin to follow the steps of trio analysis: [(0) Getting used to the project directory](#step-0---getting-used-to-the-project-directory), [(1) Read alignment](#step-1---read-alignment), [(2) Variant calling](#step-2---variant-calling), [(3) Joint Genotyping](#step-3---joint-genotyping), [(4) Variant filtering](#step-4---variant-filtering), [(5) De novo detection and more filters](#step-5---de-novo-detection-and-more-filters), [(6) Annotating the de novo candidates](#step-6-annotating-the-de-novo-candidates). Finally, there are some [hints to elaborate your report](#extra-notes-for-the-report).
 
 ## Step 0 - Getting used to the project directory
 
-#### Log into your UPPMAX Rackham account
-From the terminal, use `ssh username@pelle.uppmax.uu.se` and enter your UPPMAX password, you are now in your login node `/home/username`. Later to retrieve data, in another terminal window, connect to file transfer system by `sftp username@rackham.uppmax.uu.se`.
+#### Log into your UPPMAX Pelle account
+From the terminal, use `ssh username@pelle.uppmax.uu.se` and enter your UPPMAX password, you are now in your login node `/home/username`. Later to retrieve data, in another terminal window, connect to file transfer system by `sftp username@pelle.uppmax.uu.se`.
 
 #### Project data overview
 All project data are stored in the directory `/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants`. To check what it contains, instead of `ls` which only lists the files, you can use `du -sh /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/*` which shows the total size of a directory/file in a human-readable format (e.g., KB, MB, GB; `du` = disk usage, `-s` = summarize, `-h` = human-readable, `*` is standing in for “whatever string comes after `case1/`”):
@@ -109,7 +109,7 @@ rm "$INTERMEDIATE_SAM" "$INTERMEDIATE_BAM"
 
 The script above is for aligning the sequencing data of "child". Try to understand the meaning of each command, either checking the software's online documentation (recommended), or simply ask a generative AI. Replace `your-workspace` and `your-case` with the correct names to make it run. The same needs to be done for the parents too. Note that in the beginning I requested 16 computing cores by `-n 16`, and in the commands below, `-t 16` and `-@ 16` are enabling multiple threading, otherwise the software won't know to parallelize the tasks and runs everything in a single thread even if 16 cores are available. Not every function is able to do multiple threading, and we should always check the documentation.
 
-To write your script, you should use a plain text editor, not Word or other softwares which process many symbols differently. On Rackham, you can directly write the script by the tool `nano`, simply enter
+To write your script, you should use a plain text editor, not Word or other softwares which process many symbols differently. On Pelle, you can directly write the script by the tool `nano`, simply enter
 ```
 nano your-analysis-script.sh
 ```
@@ -128,7 +128,7 @@ For the next steps, example commands will be provided to help you build your own
 
 This is the most time-consuming step in this trio analysis. Each sample can take ~1.5 day (with 16 cores requested), so make sure that the time requested is sufficient. Once the reads are aligned, we would like to identify where the sample’s genome differs from the reference. Variant callers like GATK ([The Genome Analysis Toolkit](https://pmc.ncbi.nlm.nih.gov/articles/PMC2928508/)) scan through the alignments to detect mismatches, insertions, and deletions.
 
-GATK is available on Rackham once you've loaded the `bioinfo-tools`: `module load GATK`. To do the variant calling, use the `HaplotypeCaller` per sample in GVCF mode as:
+GATK is available on Pelle once you've loaded the `bioinfo-tools`: `module load GATK`. To do the variant calling, use the `HaplotypeCaller` per sample in GVCF mode as:
 ```
 gatk HaplotypeCaller -R $REF \
 	-I $YOUR_WORKSPACE/child_aligned.cram \
@@ -381,7 +381,7 @@ tabix -p vcf de_novo_candidates.vcf.gz
 
 #### Using SnpEff
 
-Load the module `snpEff` once you have loaded `bioinfo-tools`. SnpEff is written in Java, so it requires a Java runtime environment to execute. On HPC systems, different versions of Java may be available, and not all software is guaranteed to work with every version. We can check the versions of Java available on Rackham by `module avail java`; by `module load java/OpenJDK_17+35`, we explicitly load Java version 17 (OpenJDK build 35), which is known to be compatible with SnpEff.
+Load the module `snpEff` once you have loaded `bioinfo-tools`. SnpEff is written in Java, so it requires a Java runtime environment to execute. On HPC systems, different versions of Java may be available, and not all software is guaranteed to work with every version. We can check the versions of Java available on Pelle by `module avail java`; by `module load java/OpenJDK_17+35`, we explicitly load Java version 17 (OpenJDK build 35), which is known to be compatible with SnpEff.
 
 Then SnpEff shall be able to run smoothly and you can also get the compressed output together:
 
@@ -401,7 +401,7 @@ Similarly, for simplicity, you can extract the information and convert them into
 bcftools query -f '%CHROM\t%POS\t%REF\t%ALT\t%INFO\n' de_novo_snpEff.vcf.gz > de_novo_snpEff.tsv
 ```
 
-You can either load it in R on Rackham or download the file to your local computer. In short, SnpEff can predict whether the change occurs in a coding region, whether it alters the protein sequence, and what gene/transcript is affected. These predictions are stored in the `ANN` field of the `INFO` column in the annotated VCF, which you can access by `INFO/ANN`. For more details, you can check by:
+You can either load it in R on Pelle or download the file to your local computer. In short, SnpEff can predict whether the change occurs in a coding region, whether it alters the protein sequence, and what gene/transcript is affected. These predictions are stored in the `ANN` field of the `INFO` column in the annotated VCF, which you can access by `INFO/ANN`. For more details, you can check by:
 
 ```
 bcftools view -h de_novo_snpEff.vcf.gz | grep "^##INFO"
