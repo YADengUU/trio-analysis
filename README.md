@@ -54,7 +54,7 @@ du -sh /gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants/ClinVar/*
 PROJECT_FOLDER="/gorilla/proj/uppmax2024-2-1/uppmax2024-2-1/rare_variants"
 mkdir $PROJECT_FOLDER/your_name
 ```
-From now on, you will be working inside `$PROJECT_FOLDER/your_name` (use `cd $PROJECT_FOLDER/your_name` to get there).
+From now on, you will be working inside `$PROJECT_FOLDER/your_name` (use `cd $PROJECT_FOLDER/your_name` to get there). To optimize the storage for future students, by the end of the course, please remove your workspace by `rm -r $PROJECT_FOLDER/your_name` or a better option is to run `chmod -R g+rwx $PROJECT_FOLDER/your_name` so that your files and directories are read/writable/listable by the instructors to manage.
 
 #### Quality control (QC) of FASTQ?
 Usually, QC is needed to check for sequencing quality issues (adapter contamination, low-quality bases, abnormal GC content), but since our data is synthetic, this step can be omitted. `fastp` is an efficient tool for this step, in case of curiosity, if you run QC for the sequencing data above, you will just get "Sequences flagged as poor quality: 0" reported in its output .html files.
